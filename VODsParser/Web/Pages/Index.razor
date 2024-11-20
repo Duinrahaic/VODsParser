@@ -1,0 +1,170 @@
+@page "/"
+@using VODsParser.Model
+@using VODsParser.Services
+@using VODsParser.Utilities
+@inject IFolderPicker FolderPicker
+
+
+<div id="fileSelectDiv" class="item clickable @(ErrorCss(_eventConfig.IsValidInputFile()))" @onclick="ExploreFile">
+    <div class="item row">
+        <label> Select File </label>
+        <div>
+            @if (_eventConfig.IsValidInputFile())
+            {
+                @TimeSpan.FromSeconds(FfmpegProcessor.GetVideoDuration(_eventConfig.InputFilePath)).ToString(@"hh\:mm\:ss")
+            }
+        </div>
+    </div>
+    <div class="item row">
+        <i class="fa-solid fa-file"></i>
+        <div class="item-detail">
+            @if (_eventConfig.IsValidInputFile())
+            {
+                @_eventConfig.InputFilePath.Split("\\").Last()
+            }
+            else
+            {
+                <span> Select input video file </span>
+            }
+        </div>
+    </div>
+    <input type="file" id="fileInput" style="display: none;" webkitdirectory>
+</div>
+<div class="item clickable @(ErrorCss(_eventConfig.IsValidOutputFolder()))"  @onclick="ExploreFolder" >
+    <label> Select Destination </label>
+    <div class="item row" >
+        <i class="fa-solid fa-folder"></i>
+        <div class="item-detail">
+            @if (_eventConfig.IsValidOutputFolder())
+            {
+                @_eventConfig.OutputFolderPath.Split("\\").Last()
+            }
+            else
+            {
+                <span> Select a folder to save the output </span>
+            }
+        </div>
+    </div>
+</div>
+<div class="item clickable @(ErrorCss(_eventConfig.IsValidInputLog()))" @onclick="ExploreVrChatLogFile">
+    <div class="item row">
+        <label> Select VRChat Log </label>
+    </div>
+    <div class="item row" >
+        <i class="fa-solid fa-file"></i>
+        <div class="item-detail">
+            @if (_eventConfig.IsValidInputLog())
+            {
+                @_eventConfig.InputLog.Split("\\").Last()
+            }
+            else
+            {
+                <span> Select VRChat Log</span>
+            }       
+        </div>
+    </div>
+</div>
+
+<div class="item @(ErrorCss(_eventConfig.IsValidEventName()))" >
+    <label> Event Name </label>
+    <div class="item row" >
+        <i class="fa-solid fa-quote-left"></i>
+        <input value="@_eventConfig.EventName" @oninput="UpdateEventName"/>
+    </div>
+</div>
+
+
+<button class="wide-button" disabled="@(!_validConfig)" @onclick="ProcessVideo">
+    Process
+</button>
+
+
+
+
+
+@code{
+    
+    private EventConfig _eventConfig = new();
+
+    private bool _validConfig = false;
+    
+    private void CheckUpdateConfig()
+    {
+        _validConfig = _eventConfig.IsValid();
+    }
+    
+    private string ErrorCss(bool condition) => !condition ? "error" : "";
+    
+
+    private async void ExploreFile(MouseEventArgs e)
+    {
+        try
+        {
+            var tempFile = await FolderPicker.DisplayFilePickerAsync(FilePaths.UserVideosPath);
+            if (FileChecker.IsValidVideoFile(tempFile) && !string.IsNullOrEmpty(tempFile))
+            {
+                _eventConfig.InputFilePath = tempFile;
+                CheckUpdateConfig();
+            }
+        }
+        catch(Exception exception)
+        {
+            //ignore
+        }
+        StateHasChanged();
+
+    }
+    private async void ExploreFolder(MouseEventArgs e)
+    {
+        try
+        {
+            _eventConfig.OutputFolderPath = await FolderPicker.DisplayFolderPickerAsync(FilePaths.UserVideosPath) ?? "";
+            CheckUpdateConfig();
+        }
+        catch(Exception exception)
+        {
+            //ignore
+        }
+        StateHasChanged();
+    }
+    
+
+    private async void ExploreVrChatLogFile(MouseEventArgs e)
+    {
+
+        try
+        {
+            var tempFile = await FolderPicker.DisplayFilePickerAsync(FilePaths.VRChatLogPath) ?? "";
+            if (FileChecker.IsValidLogFile(tempFile))
+            {
+                _eventConfig.InputLog= tempFile;
+                
+                CheckUpdateConfig();
+            }
+        }
+        catch (Exception ex)
+        {  
+            //ignore
+        }
+        StateHasChanged();
+    }
+    
+    
+    private void UpdateEventName(ChangeEventArgs e)
+    {
+        _eventConfig.EventName = e.Value as string ?? "";
+    }
+
+    private void ProcessVideo()
+    {
+        if (_eventConfig.IsValid())
+        {
+            List<(DateTime Time, string User)> videoChangeTimes = VRChatLogTools.ParseLogFileForVideoChanges(_eventConfig.InputLog);
+            List<(DateTime SplitTime, string User)> splitPoints = VRChatLogTools.CalculateSplitPoints(videoChangeTimes);
+          
+            List<string> commands = VideoTools.GenerateFFmpegCommands(_eventConfig.InputFilePath, _eventConfig.EventName, _eventConfig.OutputFolderPath, splitPoints);            
+            FfmpegProcessor.RunFfmpegCommands(commands);
+        }
+    }
+ 
+}

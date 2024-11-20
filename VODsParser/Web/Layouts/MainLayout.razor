@@ -1,0 +1,28 @@
+@using VODsParser.Utilities
+@inherits LayoutComponentBase
+
+<div class="app">
+    <div class="app-header">
+        <div class="app-header-item">
+            <h1>VODsParser</h1>
+        </div>
+
+        <div class="app-header-item @ffmpegError" @onclick="OnLinkClicked" >
+            <h2>FFMPeg Is Missing</h2>
+        </div>
+    </div>
+    <div class="app-body">
+        <div class="app-body-content">
+            @Body
+
+        </div>
+
+    </div>
+</div>
+
+
+@code{
+
+    string ffmpegError = FfmpegProcessor.IsFFmpegInstalled() ? "error": string.Empty;
+    void OnLinkClicked() => ExternalProcessTools.OpenLink("https://ffmpeg.org/download.html");
+}
