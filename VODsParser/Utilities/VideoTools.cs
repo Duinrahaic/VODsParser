@@ -11,8 +11,9 @@ public static class VideoTools
         string baseName = Path.GetFileNameWithoutExtension(filename);
         return DateTime.ParseExact(baseName, "yyyy-MM-dd HH-mm-ss", CultureInfo.InvariantCulture);
     }
-    
-    public static List<(double, string)> GenerateRelativeSplitPoints(List<(DateTime SplitTime, string User)> splitPoints, double totalDuration)
+
+    public static List<(double, string)> GenerateRelativeSplitPoints(
+        List<(DateTime SplitTime, string User)> splitPoints, double totalDuration)
     {
         var durations = new List<(double, string)>();
         double totalSegmentsDuration = 0;
@@ -36,46 +37,59 @@ public static class VideoTools
             durations.Add((duration, user));
             totalSegmentsDuration += duration;
         }
-        
+
         return durations;
     }
-    
-    public static List<string> GenerateFFmpegCommands(string videoFile, string eventName, string destination, List<(DateTime SplitTime, string User)> splitPoints)
+
+    public static List<string> GenerateFFmpegCommands(
+        string videoFile,
+        string eventName,
+        string destination,
+        List<(DateTime SplitTime, string User)> splitPoints,
+        int paddingSeconds = 15)
     {
         List<string> commands = new();
-        double totalDuration = FfmpegProcessor.GetVideoDuration(videoFile) ;
+        double totalDuration = FfmpegProcessor.GetVideoDuration(videoFile);
+
         // Extract the timestamp from the video filename
         DateTime videoTimestamp = ExtractTimestampFromFilename(videoFile);
-        
+
         foreach (var splitPoint in splitPoints)
         {
             // Calculate the relative start time in the video
             TimeSpan relativeTime = splitPoint.SplitTime - videoTimestamp;
-        
-            // Check if the relative time is within the video duration
-            if (relativeTime.TotalSeconds < 0 || relativeTime.TotalSeconds > totalDuration)
+
+            // Ensure start time does not go negative when applying padding
+            TimeSpan paddedStartTime = relativeTime - TimeSpan.FromSeconds(paddingSeconds);
+            if (paddedStartTime < TimeSpan.Zero)
             {
-                Console.WriteLine($"Split point {splitPoint.SplitTime} is outside the video duration.");
-                continue;
+                paddedStartTime = TimeSpan.Zero;
             }
 
             // Find the corresponding duration for this segment
             var nextPoint = splitPoints.FirstOrDefault(t => t.SplitTime > splitPoint.SplitTime);
-   
-            
+
             TimeSpan segmentDuration = (nextPoint.SplitTime - splitPoint.SplitTime);
 
+            // Add padding to the duration but ensure it does not exceed total video duration
+            TimeSpan paddedDuration = segmentDuration + TimeSpan.FromSeconds(paddingSeconds * 2);
+            if (paddedStartTime + paddedDuration > TimeSpan.FromSeconds(totalDuration))
+            {
+                paddedDuration = TimeSpan.FromSeconds(totalDuration) - paddedStartTime;
+            }
+
             // Construct the FFmpeg command
-            string command = $"ffmpeg -i \"{videoFile}\" -ss {relativeTime.ToString(@"hh\:mm\:ss")} -t {segmentDuration.ToString(@"hh\:mm\:ss")} -c copy \"{destination}\\{eventName}_{commands.Count()}_{splitPoint.User}.mp4\"";
+            string command =
+                $"ffmpeg -i \"{videoFile}\" -ss {paddedStartTime:hh\\:mm\\:ss} -t {paddedDuration:hh\\:mm\\:ss} -c copy \"{destination}\\{eventName}_{commands.Count}_{splitPoint.User}.mp4\"";
+
+            // If there's no next split point, process the rest of the video
             if (nextPoint.SplitTime.Year == 0001)
             {
-                command = $"ffmpeg -i \"{videoFile}\" -ss {relativeTime.ToString(@"hh\:mm\:ss")} -c copy \"{destination}\\{eventName}_{commands.Count()}_{splitPoint.User}.mp4\"";
-
+                command =
+                    $"ffmpeg -i \"{videoFile}\" -ss {paddedStartTime:hh\\:mm\\:ss} -c copy \"{destination}\\{eventName}_{commands.Count}_{splitPoint.User}.mp4\"";
             }
-            
-            // Add the command with start time and duration as a tuple
+
             commands.Add(command);
-            
         }
 
         return commands;
