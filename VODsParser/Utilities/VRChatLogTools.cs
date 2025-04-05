@@ -40,7 +40,7 @@ public static class VRChatLogTools
     {
         var splitPoints = new List<(DateTime, string)>();
 
-        for (int i = 1; i < times.Count; i++)
+        for (int i = 0; i < times.Count; i++)
         {
             DateTime nextTime = times[i].Time;
             string user = times[i].User;
