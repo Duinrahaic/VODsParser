@@ -39,15 +39,33 @@ public static class VRChatLogTools
     public static List<(DateTime, string)> CalculateSplitPoints(List<(DateTime Time, string User)> times)
     {
         var splitPoints = new List<(DateTime, string)>();
-
-        for (int i = 0; i < times.Count; i++)
+        
+        if (times.Count == 0)
+            return splitPoints;
+        
+        // Add the first time point
+        var currentGroup = (StartTime: times[0].Time, User: times[0].User);
+        
+        for (int i = 1; i < times.Count; i++)
         {
-            DateTime nextTime = times[i].Time;
-            string user = times[i].User;
-            DateTime splitPoint = nextTime.AddSeconds(-10); // 10 seconds before the next event
-            splitPoints.Add((splitPoint, user));
+            var currentTime = times[i];
+            
+            // If the current user is different from the group we're tracking
+            if (currentTime.User != currentGroup.User)
+            {
+                // Add the previous group to split points (10 seconds before the change)
+                splitPoints.Add((currentGroup.StartTime.AddSeconds(-10), currentGroup.User));
+                
+                // Start a new group
+                currentGroup = (StartTime: currentTime.Time, User: currentTime.User);
+            }
+            // If the same user appears again (likely a reload due to lag), we continue the current group
+            // The end time will automatically be determined by the next different user's start time
         }
-
+        
+        // Add the last group
+        splitPoints.Add((currentGroup.StartTime.AddSeconds(-10), currentGroup.User));
+        
         return splitPoints;
     }
 

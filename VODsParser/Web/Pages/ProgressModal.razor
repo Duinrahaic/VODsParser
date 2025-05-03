@@ -1,0 +1,92 @@
+@using System.Diagnostics
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+@if (_isVisible)
+{
+    <div class="modal show" id="progressModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>@Title</h3>
+            </div>
+            <div class="modal-body">
+                <div class="progress-info">
+                    <p>@StatusMessage</p>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" style="width: @ProgressPercent%"></div>
+                </div>
+                <div class="progress-details">
+                    @if (CurrentStep > 0 && TotalSteps > 0)
+                    {
+                        <span>Step @CurrentStep of @TotalSteps</span>
+                    }
+                    else
+                    {
+                        <span>Preparing...</span>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-button" @onclick="OnCancelClicked">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = "Processing";
+
+    [Parameter]
+    public string StatusMessage { get; set; } = "Waiting to start...";
+
+    [Parameter]
+    public int ProgressPercent { get; set; } = 0;
+
+    [Parameter]
+    public int CurrentStep { get; set; } = 0;
+
+    [Parameter]
+    public int TotalSteps { get; set; } = 0;
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private bool _isVisible = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_isVisible)
+        {
+            // Use our JavaScript helper to position the modal correctly
+            await JSRuntime.InvokeVoidAsync("modalHelper.positionModal");
+        }
+    }
+
+    public async Task Show()
+    {
+        _isVisible = true;
+        StateHasChanged();
+        
+        // Allow the UI to update before positioning the modal
+        await Task.Delay(10);
+        await JSRuntime.InvokeVoidAsync("modalHelper.positionModal");
+    }
+
+    public void Hide()
+    {
+        _isVisible = false;
+        // Reset progress state when hiding
+        ProgressPercent = 0;
+        CurrentStep = 0;
+        TotalSteps = 0;
+        StatusMessage = "Waiting to start...";
+        StateHasChanged();
+    }
+
+    private async Task OnCancelClicked()
+    {
+        await OnCancel.InvokeAsync();
+    }
+} 

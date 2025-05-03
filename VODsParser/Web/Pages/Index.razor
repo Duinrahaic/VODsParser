@@ -3,6 +3,7 @@
 @using VODsParser.Services
 @using VODsParser.Utilities
 @inject IFolderPicker FolderPicker
+@implements IDisposable
 
 
 <div id="fileSelectDiv" class="item clickable @(ErrorCss(_eventConfig.IsValidInputFile()))" @onclick="ExploreFile">
@@ -78,15 +79,58 @@
     Process
 </button>
 
-
-
-
+<ProgressModal 
+    @ref="_progressModal"
+    Title="Processing Video"
+    OnCancel="CancelProcessing" />
 
 @code{
     
     private EventConfig _eventConfig = new();
-
     private bool _validConfig = false;
+    private ProgressModal? _progressModal;
+    
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        FfmpegProcessor.ProcessProgress += OnProcessProgress;
+    }
+    
+    protected override void OnAfterRender(bool firstRender)
+    {
+        base.OnAfterRender(firstRender);
+        if (firstRender)
+        {
+            // Initialize the progress modal
+            CheckUpdateConfig();
+            
+            // Ensure the modal starts hidden when component is first rendered
+            _progressModal?.Hide();
+        }
+    }
+    
+    public void Dispose()
+    {
+        FfmpegProcessor.ProcessProgress -= OnProcessProgress;
+    }
+    
+    private void OnProcessProgress(object? sender, ProcessProgressEventArgs e)
+    {
+        if (_progressModal != null)
+        {
+            _progressModal.StatusMessage = e.StatusMessage;
+            _progressModal.ProgressPercent = e.ProgressPercent;
+            _progressModal.CurrentStep = e.CurrentStep;
+            _progressModal.TotalSteps = e.TotalSteps;
+            
+            InvokeAsync(StateHasChanged);
+        }
+    }
+    
+    private void CancelProcessing()
+    {
+        FfmpegProcessor.CancelProcessing();
+    }
     
     private void CheckUpdateConfig()
     {
@@ -155,16 +199,54 @@
         _eventConfig.EventName = e.Value as string ?? "";
     }
 
-    private void ProcessVideo()
+    private async Task ProcessVideo()
     {
         if (_eventConfig.IsValid())
         {
-            List<(DateTime Time, string User)> videoChangeTimes = VRChatLogTools.ParseLogFileForVideoChanges(_eventConfig.InputLog);
-            List<(DateTime SplitTime, string User)> splitPoints = VRChatLogTools.CalculateSplitPoints(videoChangeTimes);
-          
-            List<string> commands = VideoTools.GenerateFFmpegCommands(_eventConfig.InputFilePath, _eventConfig.EventName, _eventConfig.OutputFolderPath, splitPoints);            
-            FfmpegProcessor.RunFfmpegCommands(commands);
+            try
+            {
+                // Ensure the modal is properly reset and visible
+                _progressModal!.StatusMessage = "Preparing...";
+                _progressModal!.ProgressPercent = 0;
+                _progressModal!.CurrentStep = 0;
+                _progressModal!.TotalSteps = 0;
+                await _progressModal!.Show();
+                
+                // Force UI update before continuing
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(100); // Small delay to ensure UI updates
+                
+                // Update message to show reading log file
+                _progressModal!.StatusMessage = "Reading log file...";
+                StateHasChanged();
+                
+                // Read log file and calculate split points
+                List<(DateTime Time, string User)> videoChangeTimes = VRChatLogTools.ParseLogFileForVideoChanges(_eventConfig.InputLog);
+                
+                _progressModal!.StatusMessage = "Calculating split points...";
+                _progressModal!.ProgressPercent = 10;
+                StateHasChanged();
+                
+                List<(DateTime SplitTime, string User)> splitPoints = VRChatLogTools.CalculateSplitPoints(videoChangeTimes);
+                
+                _progressModal!.StatusMessage = "Generating commands...";
+                _progressModal!.ProgressPercent = 20;
+                StateHasChanged();
+                
+                // Generate the ffmpeg commands
+                List<string> commands = VideoTools.GenerateFFmpegCommands(_eventConfig.InputFilePath, _eventConfig.EventName, _eventConfig.OutputFolderPath, splitPoints);
+                
+                // Process the commands asynchronously
+                await FfmpegProcessor.RunFfmpegCommandsAsync(commands);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error processing video: {ex.Message}");
+            }
+            finally
+            {
+                _progressModal?.Hide();
+            }
         }
     }
- 
 }
