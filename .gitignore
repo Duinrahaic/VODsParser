@@ -1,3 +1,9 @@
+/VODsParser/obj/Debug/*
+/VODsParser/obj/Release/*
+/VODsParser/obj/*
+/VODsParser/Properties/*
+.vs
+/VODsParser/bin/*
 /VODsParser/bin/Debug/net8.0-windows/win-x64/av_libglesv2.dll
 /VODsParser/bin/Debug/net8.0-windows/win-x64/Avalonia.Base.dll
 /VODsParser/bin/Debug/net8.0-windows/win-x64/Avalonia.Controls.ColorPicker.dll

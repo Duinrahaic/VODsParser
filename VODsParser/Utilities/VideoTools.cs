@@ -54,8 +54,10 @@ public static class VideoTools
         // Extract the timestamp from the video filename
         DateTime videoTimestamp = ExtractTimestampFromFilename(videoFile);
 
-        foreach (var splitPoint in splitPoints)
+        for (int i = 0; i < splitPoints.Count; i++)
         {
+            var splitPoint = splitPoints[i];
+            
             // Calculate the relative start time in the video
             TimeSpan relativeTime = splitPoint.SplitTime - videoTimestamp;
 
@@ -66,29 +68,28 @@ public static class VideoTools
                 paddedStartTime = TimeSpan.Zero;
             }
 
-            // Find the corresponding duration for this segment
-            var nextPoint = splitPoints.FirstOrDefault(t => t.SplitTime > splitPoint.SplitTime);
+            // Find the next split point or end of video
+            TimeSpan paddedDuration;
+            if (i < splitPoints.Count - 1)
+            {
+                // Calculate duration between this split point and the next
+                TimeSpan segmentDuration = splitPoints[i + 1].SplitTime - splitPoint.SplitTime;
+                paddedDuration = segmentDuration + TimeSpan.FromSeconds(paddingSeconds * 2);
+            }
+            else
+            {
+                // Last segment, process to the end of the video
+                paddedDuration = TimeSpan.FromSeconds(totalDuration) - paddedStartTime;
+            }
 
-            TimeSpan segmentDuration = (nextPoint.SplitTime - splitPoint.SplitTime);
-
-            // Add padding to the duration but ensure it does not exceed total video duration
-            TimeSpan paddedDuration = segmentDuration + TimeSpan.FromSeconds(paddingSeconds * 2);
+            // Ensure duration doesn't exceed video length
             if (paddedStartTime + paddedDuration > TimeSpan.FromSeconds(totalDuration))
             {
                 paddedDuration = TimeSpan.FromSeconds(totalDuration) - paddedStartTime;
             }
 
             // Construct the FFmpeg command
-            string command =
-                $"ffmpeg -i \"{videoFile}\" -ss {paddedStartTime:hh\\:mm\\:ss} -t {paddedDuration:hh\\:mm\\:ss} -c copy \"{destination}\\{eventName}_{commands.Count}_{splitPoint.User}.mp4\"";
-
-            // If there's no next split point, process the rest of the video
-            if (nextPoint.SplitTime.Year == 0001)
-            {
-                command =
-                    $"ffmpeg -i \"{videoFile}\" -ss {paddedStartTime:hh\\:mm\\:ss} -c copy \"{destination}\\{eventName}_{commands.Count}_{splitPoint.User}.mp4\"";
-            }
-
+            string command = $"ffmpeg -i \"{videoFile}\" -ss {paddedStartTime:hh\\:mm\\:ss} -t {paddedDuration:hh\\:mm\\:ss} -c copy \"{destination}\\{eventName}_{i}_{splitPoint.User}.mp4\"";
             commands.Add(command);
         }
 
